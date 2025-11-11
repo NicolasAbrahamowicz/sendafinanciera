@@ -6,32 +6,43 @@ export async function POST(req: Request) {
   try {
     const { nombre, celular, email, tipo_plan, capacidad_mensual } = await req.json();
 
-    // Deben coincidir con TU template EmailJS
+    // Estos nombres deben coincidir con tu Template en EmailJS
     const template_params = {
-      to_email: "nicoabraha83@gmail.com",   // si tu template lo usa
-      from_name: nombre,                    // {{from_name}}
-      from_email: email,                    // {{from_email}} (o reply_to si lo renombraste)
-      celular,                              // {{celular}}
-      tipo_plan,                            // {{tipo_plan}}
-      capacidad_mensual,                    // {{capacidad_mensual}}
+      to_email: "nicoabraha83@gmail.com",
+      from_name: nombre,
+      from_email: email,          // si tu template usa reply_to, renómbralo
+      celular,
+      tipo_plan,
+      capacidad_mensual,
     };
+
+    // Payload con public key en el body (requerido por tu 400)
+    const payload: any = {
+      service_id: process.env.EMAILJS_SERVICE_ID,
+      template_id: process.env.EMAILJS_TEMPLATE_ID,
+      template_params,
+      public_key: process.env.EMAILJS_PUBLIC_KEY, // <- CLAVE: incluilo siempre en server
+      // compat histórico (algunas cuentas aún usan 'user_id'):
+      user_id: process.env.EMAILJS_PUBLIC_KEY,
+    };
+
+    // Si tenés private key, agregá Authorization Bearer (opcional pero recomendado)
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (process.env.EMAILJS_ACCESS_TOKEN) {
+      headers["Authorization"] = `Bearer ${process.env.EMAILJS_ACCESS_TOKEN}`;
+      // alternativa: también podrías enviar accessToken en el body:
+      // payload.accessToken = process.env.EMAILJS_ACCESS_TOKEN;
+    }
 
     const r = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // CLAVE: usar el access token privado en Authorization
-        "Authorization": `Bearer ${process.env.EMAILJS_ACCESS_TOKEN!}`,
-      },
-      body: JSON.stringify({
-        service_id: process.env.EMAILJS_SERVICE_ID,
-        template_id: process.env.EMAILJS_TEMPLATE_ID,
-        template_params,
-      }),
+      headers,
+      body: JSON.stringify(payload),
     });
 
     const text = await r.text();
     if (!r.ok) throw new Error(`EmailJS ${r.status}: ${text}`);
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("Send lead error:", e?.message || e);
